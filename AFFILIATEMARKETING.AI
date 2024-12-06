@@ -1,0 +1,75 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+from flask import Flask, render_template, request, redirect, url_for, flash
+import time
+import random
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # For flash messages
+
+class AffiliateMarketingAI:
+    def __init__(self):
+        self.platforms_data = []
+
+    def scrape_platform_data(self, urls):
+        for url in urls:
+            try:
+                headers = {'User -Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()  # Raise an error for bad responses
+                soup = BeautifulSoup(response.text, 'html.parser')
+
+                # Extract relevant data from the page
+                data = {
+                    'name': soup.select_one('h1').text.strip() if soup.select_one('h1') else 'N/A',
+                    'conversion_rate': float(soup.select_one('.conversion-rate').text.strip('%')) / 100 if soup.select_one('.conversion-rate') else 0.0,
+                    'commission': float(soup.select_one('.commission').text.strip('$')) if soup.select_one('.commission') else 0.0,
+                    'traffic': int(soup.select_one('.traffic').text.replace(',', '')) if soup.select_one('.traffic') else 0
+                }
+                self.platforms_data.append(data)
+                time.sleep(random.uniform(1, 3))  # Random delay between requests
+            except Exception as e:
+                print(f"Error scraping {url}: {e}")
+
+    def analyze_data(self, min_conversion_rate=0.1, min_commission=50, min_traffic=1000):
+        df = pd.DataFrame(self.platforms_data)
+        recommended = df[
+            (df['conversion_rate'] >= min_conversion_rate) &
+            (df['commission'] >= min_commission) &
+            (df['traffic'] >= min_traffic)
+        ]
+        return recommended
+
+    def integrate_links(self, platform_name, affiliate_link):
+        # Logic to integrate the affiliate link into a marketing channel
+        print(f"Integrating {affiliate_link} for {platform_name}")
+
+# Initialize the AI
+ai = AffiliateMarketingAI()
+
+# List of affiliate platform URLs to scrape
+platform_urls = [
+    'https://example-affiliate-platform-1.com',
+    'https://example-affiliate-platform-2.com',
+    'https://example-affiliate-platform-3.com'
+]
+
+# Scrape data from the platforms
+ai.scrape_platform_data(platform_urls)
+
+@app.route('/')
+def index():
+    recommendations = ai.analyze_data()
+    return render_template('index.html', recommendations=recommendations.to_dict(orient='records'))
+
+@app.route('/integrate', methods=['POST'])
+def integrate():
+    platform_name = request.form['platform_name']
+    affiliate_link = request.form['affiliate_link']
+    ai.integrate_links(platform_name, affiliate_link)
+    flash("Link integrated successfully!", "success")
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    app.run(debug=True)
